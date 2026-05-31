@@ -1,0 +1,227 @@
+
+### Colección de Pruebas - StockFlow API
+
+### Variables de entorno (modifica el puerto si es necesario)
+@baseUrl = http://localhost:3000/api
+@adminToken = {{loginAdmin.response.body.data.token}}
+@operatorToken = {{loginOperator.response.body.data.token}}
+
+
+# 1. AUTENTICACIÓN
+
+### 1.1 Registro exitoso (usuario nuevo)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@stockflow.com",
+  "password": "123456"
+}
+
+### 1.2 Registro duplicado (debe devolver 409)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "admin@stockflow.com",
+  "password": "123456"
+}
+
+### 1.3 Login como ADMIN (guarda el token automáticamente)
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@stockflow.com",
+  "password": "Admin1234"
+}
+
+### 1.4 Login como OPERATOR
+# @name loginOperator
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "operator@stockflow.com",
+  "password": "Oper1234"
+}
+
+### 1.5 Login con credenciales inválidas (401)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@stockflow.com",
+  "password": "equivocada"
+}
+
+
+# 2. PRODUCTOS
+
+### 2.1 Listar todos los productos (público)
+GET {{baseUrl}}/products
+
+### 2.2 Filtrar por categoría "Electrónica"
+GET {{baseUrl}}/products?category=Electrónica
+
+### 2.3 Obtener producto por ID (1)
+GET {{baseUrl}}/products/1
+
+### 2.4 Crear producto (ADMIN) – token automático
+POST {{baseUrl}}/products
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "Tablet Samsung",
+  "sku": "TAB-001",
+  "stock": 20,
+  "minStock": 5,
+  "price": 299.99,
+  "categoryId": 2
+}
+
+### 2.5 Intentar crear sin token (401)
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "name": "Test",
+  "sku": "TST-001",
+  "stock": 10,
+  "minStock": 2,
+  "price": 99.99,
+  "categoryId": 1
+}
+
+### 2.6 Intentar crear con OPERATOR (403)
+POST {{baseUrl}}/products
+Content-Type: application/json
+Authorization: Bearer {{operatorToken}}
+
+{
+  "name": "Test Operator",
+  "sku": "TST-002",
+  "stock": 10,
+  "minStock": 2,
+  "price": 99.99,
+  "categoryId": 1
+}
+
+### 2.7 Actualizar producto (ADMIN)
+PUT {{baseUrl}}/products/1
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "stock": 25
+}
+
+### 2.8 Eliminar un producto creado (ADMIN)
+DELETE {{baseUrl}}/products/6
+Authorization: Bearer {{adminToken}}
+
+
+# 3. PEDIDOS (TRANSACCIONAL)
+
+### 3.1 Crear pedido válido (descuenta stock)
+POST {{baseUrl}}/orders
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "items": [
+    {"productId": 1, "quantity": 2},
+    {"productId": 2, "quantity": 1}
+  ]
+}
+
+### 3.2 Verificar stock del producto 1
+GET {{baseUrl}}/products/1
+
+### 3.2b Verificar stock del producto 2
+GET {{baseUrl}}/products/2
+
+### 3.3 Intentar pedido con stock insuficiente (error 400)
+POST {{baseUrl}}/orders
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "items": [
+    {"productId": 3, "quantity": 100}
+  ]
+}
+
+### 3.4 Obtener detalles de un pedido (id 1)
+GET {{baseUrl}}/orders/1
+Authorization: Bearer {{adminToken}}
+
+### 3.5 Cambiar estado a DISPATCHED (ADMIN)
+PATCH {{baseUrl}}/orders/1/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "DISPATCHED"
+}
+
+### 3.6 Intentar cancelar un pedido ya despachado (409)
+PATCH {{baseUrl}}/orders/1/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "CANCELLED"
+}
+
+### 3.7 Cancelar un pedido PENDING con reintegro de stock
+### Primero crea un nuevo pedido pequeño (guardamos su ID manualmente)
+POST {{baseUrl}}/orders
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "items": [
+    {"productId": 4, "quantity": 1}
+  ]
+}
+
+### Ahora cancela el pedido recién creado (suponiendo ID = 2)
+PATCH {{baseUrl}}/orders/2/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "CANCELLED"
+}
+
+### Verifica que el stock del producto 4 se reintegró
+GET {{baseUrl}}/products/4
+
+### 3.8 Doble cancelación (409)
+PATCH {{baseUrl}}/orders/2/status
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "status": "CANCELLED"
+}
+
+
+# 4. REPORTES (SÓLO ADMIN)
+
+### 4.1 Productos con bajo stock (debe aparecer "Teclado mecánico")
+GET {{baseUrl}}/reports/low-stock
+Authorization: Bearer {{adminToken}}
+
+### 4.2 Intentar acceder sin token (401)
+GET {{baseUrl}}/reports/low-stock
+
+### 4.3 Intentar con OPERATOR (403)
+GET {{baseUrl}}/reports/low-stock
+Authorization: Bearer {{operatorToken}}
+
+
+
